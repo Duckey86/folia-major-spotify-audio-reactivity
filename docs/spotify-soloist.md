@@ -34,7 +34,7 @@ Soloist 只是备用方式。标准方式能放的账号不需要它。
 ## 限制
 
 - **密钥会出现在进程列表里**：Soloist 只能从命令行（`-k`）接收密钥，没有环境变量或密钥文件的选项。它运行时，这台电脑上的其他用户能在进程列表里看到它。密钥本身用系统钥匙串加密保存，不会发给页面。Linux 上钥匙串后端是 `basic_text` 时不保存密钥。
-- **声音不经过 Folia**：Soloist 自己把声音送到系统输出。Folia 的均衡器、音效、ReplayGain、Automix 和跟着音频跳动的效果都不处理它，视频导出也不可用。音量滑杆会同步到 Soloist。
+- **声音不经过 Folia**：Soloist 自己把声音送到系统输出。Folia 的均衡器、音效、ReplayGain 和 Automix 不处理它，视频导出也不可用。音量滑杆会同步到 Soloist。Windows 版本通过进程专用 WASAPI 回环采集频谱，让 Nebbia、Machi 等视觉效果随音乐变化；只传递频段能量和频谱，不保存或传输原始音频。详见 [采集迁移与验证报告](soloist-capture-migration.md)。
 - **只有这些平台有构建**：Linux x86_64 / arm64 / armv7、macOS Apple Silicon、Windows x86_64。
 - **配对的账号可能和登录的不同**：配对是在 Spotify 应用里选设备，Soloist 用的是选它的那个账号，Folia 没法核对两者是不是同一个。
 - **结束判断**：Soloist 没有"一首歌放完"的事件，放完还可能自己续播推荐歌曲。Folia 按播放位置判断：离结尾 2.5 秒内停下或换了歌，就算这首放完，并立即暂停 Soloist 自己的下一首，由 Folia 的队列决定下一首放什么。
