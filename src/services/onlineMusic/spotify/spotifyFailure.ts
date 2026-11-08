@@ -11,36 +11,27 @@ import type { OnlineFailureDetail, OnlineFailureOperation } from '../../../types
 // Spotify refusing a track's key before and after it gave this account one in this run
 // (electron/spotify/audio.cjs).
 const NAMED: Record<string, OnlineFailureDetail> = {
-    'Spotify asked to wait before trying again': {
-        case: 'retry-later',
-        httpStatus: 429,
-    },
-    'Spotify gives this account no audio key': {
-        case: 'account-refused',
-    },
-    'Spotify refused the audio key for now': {
-        case: 'retry-later',
-    },
+    'Spotify asked to wait before trying again': { case: 'retry-later', httpStatus: 429 },
+    'Spotify gives this account no audio key': { case: 'account-refused' },
+    'Spotify refused the audio key for now': { case: 'retry-later' },
 };
 
-export const describeSpotifyFailure = (
-    _operation: OnlineFailureOperation,
-    error: unknown,
-): OnlineFailureDetail | null => {
-    if (
-        !(error instanceof OnlineProviderError) ||
-        error.providerId !== 'spotify'
-    ) {
-        return null;
-    }
+// Soloist's failures (electron/spotify/soloist.cjs), by the reason word the desktop side gives them:
+// one that setting it up mends (the program, its key, its pairing, a start that fails) is a source
+// that is not set up, and the failure offers the setup checklist; the program gone or refusing a
+// track may pass when tried again.
+const SOLOIST_REASONS: Record<string, OnlineFailureDetail> = {
+    'soloist-program': { case: 'not-configured' },
+    'soloist-key': { case: 'not-configured' },
+    'soloist-expired': { case: 'not-configured' },
+    'soloist-unpaired': { case: 'not-configured' },
+    'soloist-start': { case: 'not-configured' },
+    'soloist-gone': { case: 'unreachable' },
+    'soloist-refused': { case: 'refused' },
+};
 
-    // Preserve upstream v0.7.23 error classification.
-    if (Object.hasOwn(NAMED, error.message)) {
-        return NAMED[error.message];
-    }
-
-    // Native playback's bitrate fallback preserves the named account/temporary cases above.
-    // A refused key is not evidence that the track has no audio; Soloist uses a separate path.
-
-    return null;
+export const describeSpotifyFailure = (_operation: OnlineFailureOperation, error: unknown): OnlineFailureDetail | null => {
+    if (!(error instanceof OnlineProviderError) || error.providerId !== 'spotify') return null;
+    if (typeof error.cause === 'string' && Object.hasOwn(SOLOIST_REASONS, error.cause)) return SOLOIST_REASONS[error.cause];
+    return Object.hasOwn(NAMED, error.message) ? NAMED[error.message] : null;
 };
