@@ -153,7 +153,13 @@ struct Analyzer {
             return std::clamp(static_cast<int>(std::pow(value / 255.0f, boost) * 255.0f), 0, 255);
         };
         float bass = energy(20, 150), low = energy(150, 400);
-        std::printf("{\"power\":%d,\"bass\":%d,\"lowMid\":%d,\"mid\":%d,\"vocal\":%d,\"treble\":%d,\"spectrum\":[",
+        FILETIME stamp{};
+        GetSystemTimePreciseAsFileTime(&stamp);
+        ULARGE_INTEGER ticks{};
+        ticks.LowPart = stamp.dwLowDateTime;
+        ticks.HighPart = stamp.dwHighDateTime;
+        const auto capturedAt = (ticks.QuadPart - 116444736000000000ULL) / 10000ULL;
+        std::printf("{\"capturedAt\":%llu,\"power\":%d,\"bass\":%d,\"lowMid\":%d,\"mid\":%d,\"vocal\":%d,\"treble\":%d,\"spectrum\":[", capturedAt,
             scaled((bass + low) / 2, 3), scaled(bass, 1.8f), scaled(low, 2),
             scaled(energy(400, 1200), 2), scaled(energy(1000, 3500), 1.5f),
             scaled(energy(3500, 12000), 2));
@@ -175,6 +181,18 @@ int wmain(int argc, wchar_t** argv) {
     DWORD pid = probeAll ? GetCurrentProcessId() : ((argc > 1) ? wcstoul(argv[1], nullptr, 10) : 0);
     if (!pid) pid = findSoloist();
     if (!pid) { std::fprintf(stderr, "[capture] soloist.exe not found\n"); return 2; }
+    // An adopted PID can have been reused: verify it still belongs to the configured program.
+    HANDLE target = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!target) { std::fprintf(stderr, "[capture] target process unavailable\n"); return 2; }
+    if (!probeAll && argc > 2) {
+        wchar_t image[32768]{};
+        DWORD length = 32768;
+        if (!QueryFullProcessImageNameW(target, 0, image, &length) || _wcsicmp(image, argv[2]) != 0) {
+            CloseHandle(target);
+            std::fprintf(stderr, "[capture] target process identity changed\n");
+            return 2;
+        }
+    }
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hr)) { logError("CoInitializeEx", hr); return 3; }
     HANDLE activated = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -227,9 +245,9 @@ int wmain(int argc, wchar_t** argv) {
     if (probeAll) std::fprintf(stderr,
         "[capture] WARNING: probe-all analyses system-wide audio; close after the test. No PCM is saved.\n");
     Analyzer fft;
-    HANDLE target = OpenProcess(SYNCHRONIZE, FALSE, pid);
     // Approx. 20 snapshots per second; avoids expensive IPC per audio packet.
     ULONGLONG lastSent = 0;
+    ULONGLONG lastPacket = 0;
     ULONGLONG lastDiagnostic = GetTickCount64();
     unsigned long long intervalPackets = 0, intervalFrames = 0;
     unsigned long long intervalSilentPackets = 0, intervalNonzeroSamples = 0;
@@ -258,6 +276,7 @@ int wmain(int argc, wchar_t** argv) {
                 }
             }
             fft.consume(data, count, flags);
+            lastPacket = GetTickCount64();
             capture->ReleaseBuffer(count);
         }
         const ULONGLONG now = GetTickCount64();
@@ -272,6 +291,8 @@ int wmain(int argc, wchar_t** argv) {
             lastDiagnostic = now;
         }
         if (now - lastSent >= 50) {
+            // WASAPI may stop delivering packets in silence; never keep publishing the old FFT.
+            if (now - lastPacket >= 150) fft.available = 0;
             fft.printFrame();
             if (std::ferror(stdout)) break; // Stop when Electron closes the pipe.
             lastSent = now;

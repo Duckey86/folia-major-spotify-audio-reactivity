@@ -11,6 +11,10 @@ exports.default = async (context) => {
     throw new Error(
       `Unsupported electron-builder architecture ordinal: ${context.arch}`,
     );
+  if (context.electronPlatformName === 'win32') {
+    const { prepareSoloistCapture } = await import('../packaging/windows/build-soloist-capture.mjs');
+    prepareSoloistCapture({ arch, root: context.packager.projectDir });
+  }
   const { prepareBundledFfmpeg } = await import(
     "../packaging/ffmpeg/fetch-ffmpeg.mjs"
   );
@@ -22,7 +26,14 @@ exports.default = async (context) => {
   // file each for every platform.
   const { prepareBundledModels } = await import("./fetchModels.mjs");
   await prepareBundledModels({ outputDir: require("path").join(context.packager.projectDir, "models") });
+  if (context.electronPlatformName === 'win32') {
+    // The Apple Music WebView2 host (electron/appleMusic/windows), compiled with MSBuild.
+    const { prepareWindowsCompanion } = require('../electron/appleMusic/windows/prepareBundle.cjs');
+    prepareWindowsCompanion({ arch, projectRoot: context.packager.projectDir });
+  }
   if (context.electronPlatformName === 'darwin') {
+    const { prepareMacCompanion } = require('../electron/appleMusic/macos/prepareBundle.cjs');
+    prepareMacCompanion({ arch, projectRoot: context.packager.projectDir });
     const { prepareBundledKoffi } = await import('../packaging/macos/prepare-koffi.mjs');
     await prepareBundledKoffi({ arch, projectRoot: context.packager.projectDir });
     // The wallpaper's Stage Manager click guard (issue #698), a small native helper.

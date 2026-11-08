@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-if (process.platform === 'win32') {
-    const root = process.cwd();
+// Shared by the explicit native build and every Windows electron-builder entry point.
+export function prepareSoloistCapture({ root = process.cwd(), arch = 'x64' } = {}) {
+    if (arch !== 'x64') throw new Error(`Soloist capture is only built for Windows x64 (requested ${arch})`);
     const source = path.join(root, 'native', 'soloist-audio-capture');
     const output = path.join(root, 'build', '.soloist-capture-cmake');
     function run(...args) {
@@ -17,6 +19,9 @@ if (process.platform === 'win32') {
     const binary = path.join(root, 'build', 'soloist-capture', 'folia-soloist-capture.exe');
     if (!fs.existsSync(binary)) throw new Error(`CMake succeeded but did not generate ${binary}`);
     console.log(`[Soloist capture] Built ${binary}`);
-} else {
-    console.log('[Soloist capture] Windows-only; skipped');
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    if (process.platform === 'win32') prepareSoloistCapture();
+    else console.log('[Soloist capture] Windows-only; skipped');
 }

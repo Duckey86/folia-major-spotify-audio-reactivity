@@ -29,7 +29,8 @@ export class ExternalAudioReactivity {
         }
         const low = Math.max(0, Math.min(255, frame.bass));
         const high = Math.max(0, Math.min(255, (frame.mid + frame.treble) / 2));
-        if (source !== this.source || time < this.time || time - this.time > 0.5 || now - this.freshAt >= 350) {
+        if (source !== this.source || frame.captureSession !== this.frame?.captureSession
+            || time < this.time || time - this.time > 0.5 || now - this.freshAt >= 350) {
             this.reset();
             this.source = source;
             this.low = low;
