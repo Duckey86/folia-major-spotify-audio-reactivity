@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { NextTrackOptions } from '../../../../types/appPlayback';
-import { installExternalPlayback, subscribeExternalPlayback } from '../../../../services/onlineMusic/externalPlayback';
+import { installExternalPlayback, seekExternalPlayback, subscribeExternalPlayback } from '../../../../services/onlineMusic/externalPlayback';
 import { onlineFailureOf } from '../../../../services/onlineMusic/failure/onlineFailureCase';
 import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
 import { usePlaybackStore } from '../../../../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { onlineFailureToast } from '../source/onlineFailureToast';
 
 // src/components/app/playback/bridges/useExternalPlaybackBridge.ts
@@ -28,6 +29,10 @@ export function useExternalPlaybackBridge({ handleNextTrack }: UseExternalPlayba
         installExternalPlayback();
         return subscribeExternalPlayback(event => {
             if (event.type === 'ended') {
+                // External players have no HTMLAudioElement.loop to repeat the current song.
+                if (useAudioSettingsStore.getState().loopMode === 'one'
+                    && !usePlaybackStore.getState().isFmMode
+                    && seekExternalPlayback(0, { resume: true })) return;
                 // As <audio>'s ended handler does: nothing after this when the queue is over.
                 void latestRef.current.handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
                 return;
