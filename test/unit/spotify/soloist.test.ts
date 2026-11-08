@@ -100,7 +100,9 @@ const setup = ({
     const store = memoryStore({ SPOTIFY_SOLOIST_V1: { executable, sealedKey: sealed ? Buffer.from(`sealed:${KEY}`).toString('base64') : null } });
     const fake = program({ paired, exitAtOnce, pairAfterMs, stderr });
     const logs: string[] = [];
+    const capture = { start: vi.fn(), stop: vi.fn() };
     const soloist = createSoloist({
+        capture,
         store,
         safeStorage: keychain(available),
         dataDirectory: () => path.join(data, 'data'),
@@ -114,7 +116,7 @@ const setup = ({
         onProcessExit: (stop: () => void) => { exitStops.push(stop); },
         signInWaitMs: 400,
     });
-    return { soloist, store, ...fake, logs, data, exitStops };
+    return { soloist, store, ...fake, logs, data, exitStops, capture };
 };
 // What each Soloist made in a test would stop when the process ends.
 const exitStops: Array<() => void> = [];
@@ -498,9 +500,11 @@ describe('soloist', () => {
     });
 
     it('stops what it started when the process ends without quitting', async () => {
-        const { soloist, spawned, exitStops: stops } = setup();
+        const { soloist, spawned, exitStops: stops, capture } = setup();
         await playing(soloist, spawned);
+        expect(capture.start).toHaveBeenCalledWith(4321, '/opt/soloist');
         stops.at(-1)!();
+        expect(capture.stop).toHaveBeenCalled();
         expect(spawned[0].proc.kill).toHaveBeenCalled();
         await soloist.shutdown();
     });

@@ -811,7 +811,7 @@ declare global {
   interface Window {
     electron?: {
       soloistSetup?: (action: string, payload?: string) => Promise<unknown>;
-      onSoloistAudioFrame?: (callback: (frame: import('./types/onlineMusic').ProviderAudioAnalysisFrame) => void) => () => void;
+      onSoloistAudioFrame?: (callback: (frame: import('./types/onlineMusic').ProviderAudioAnalysisFrame | null) => void) => () => void;
       webUtils?: {
         /** Resolves the OS path of a dropped File (File.path was removed in modern Electron). */
         getPathForFile: (file: File) => string;

@@ -11,6 +11,10 @@ exports.default = async (context) => {
     throw new Error(
       `Unsupported electron-builder architecture ordinal: ${context.arch}`,
     );
+  if (context.electronPlatformName === 'win32') {
+    const { prepareSoloistCapture } = await import('../packaging/windows/build-soloist-capture.mjs');
+    prepareSoloistCapture({ arch, root: context.packager.projectDir });
+  }
   const { prepareBundledFfmpeg } = await import(
     "../packaging/ffmpeg/fetch-ffmpeg.mjs"
   );

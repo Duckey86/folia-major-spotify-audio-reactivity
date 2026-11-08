@@ -18,13 +18,14 @@ import { getTransitionHandoffProgress } from '../../../../services/automix/trans
 import { omni } from '../../../../services/onlineMusic/omni';
 import { tickBeatFx } from '../../../../services/beatFx/beatFxLive';
 import { externalAudioReactivity } from '../../../../services/beatFx/externalAudioReactivity';
+import { writeCapturedAudioSignals } from '../../../../services/beatFx/capturedAudioSignals';
 import { smartBeatMayAnalyse } from '../../../../services/beatFx/beatEffects';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
 import { useBeatFxTrack } from '../../../../hooks/useBeatFxTrack';
 import { readIncomingLyricClock } from './incomingLyricClock';
 import { isBackgroundLyricHeld, setHeldLyricTime, useBackgroundLyricHoldStore } from '../../backgroundThrottling/backgroundLyricHoldStore';
 import { getHifiPosition } from '../../../../services/hifi/hifiPlayback';
-import { getExternalPosition, isExternalPlaybackSounding } from '../../../../services/onlineMusic/externalPlayback';
+import { getExternalPosition, isExternalPlaybackSounding, readExternalPlaybackAudioAnalysis } from '../../../../services/onlineMusic/externalPlayback';
 
 // src/components/app/playback/bridges/usePlaybackVisualizerBridge.ts
 
@@ -199,7 +200,7 @@ export function usePlaybackVisualizerBridge({
     // Only the main player's own clock: a stage or PlayerCap clock is written by its own branch below.
     const pausedDeckSyncRef = useRef({ ownsClock: false, lyrics });
     pausedDeckSyncRef.current = {
-        ownsClock: activePlaybackContext === 'main' && !isNowPlayingStageActive && !isPlayerCapStageActive,
+        ownsClock: activePlaybackContext === 'main' && !isNowPlayingStageActive && !isPlayerCapStageActive && !isExternalRouteActive && !isHifiActive,
         lyrics,
     };
     useEffect(() => {
@@ -249,30 +250,25 @@ export function usePlaybackVisualizerBridge({
         // the track it is finishing, so that clock and picture never describe different songs.
         const audioElement = getDisplayElement?.() ?? audioRef.current;
         // Never on the HiFi route, so the spectrum keeps the idle breath there: there is no analyser on mpv's output.
-        const isActuallyPlaying = !isHifiActive && !isExternalActive && Boolean(audioElement && !audioElement.paused && !audioElement.ended);
+        const isActuallyPlaying = !isHifiActive && !isExternalRouteActive && Boolean(audioElement && !audioElement.paused && !audioElement.ended);
         // Mid-handover a deck can be loading while the other one is still sounding. The analyser
         // is downstream of both, so it has real signal: dropping to the idle breath here would put
         // a visible stutter at exactly the moment meant to be seamless.
-        const hasAudibleSignal = isActuallyPlaying || isTransitionAudible();
-        const providerFrame = omni.readAudioAnalysisFrame(audioElement);
+        const hasAudibleSignal = !isHifiActive && !isExternalRouteActive && (isActuallyPlaying || isTransitionAudible());
+        const external = isExternalRouteActive ? readExternalPlaybackAudioAnalysis() : null;
+        const providerFrame = external ? external.frame : isHifiActive ? undefined : omni.readAudioAnalysisFrame(audioElement);
         externalAudioReactivity.update(
-            isActuallyPlaying && !backgroundHold && beatFxWantedRef.current
+            !backgroundHold && beatFxWantedRef.current
                 && smartBeatMayAnalyse(useVisualizerSettingsStore.getState().smartBeat)
-                ? audioElement?.currentSrc || null : null,
-            audioElement?.currentTime ?? 0, providerFrame, performance.now(),
+                ? external?.source ?? (isActuallyPlaying ? audioElement?.currentSrc || null : null) : null,
+            external?.time ?? audioElement?.currentTime ?? 0, providerFrame, performance.now(),
         );
 
         if (backgroundHold) {
             // The bands keep their last values: nothing draws from them while held.
-        } else if (providerFrame && isActuallyPlaying) {
+        } else if (providerFrame !== undefined) {
             // Capture only analysis data from Soloist; no audio playback in Folia.
-            audioPower.set(providerFrame.power);
-            audioBands.bass.set(providerFrame.bass);
-            audioBands.lowMid.set(providerFrame.lowMid);
-            audioBands.mid.set(providerFrame.mid);
-            audioBands.vocal.set(providerFrame.vocal);
-            audioBands.treble.set(providerFrame.treble);
-            audioBands.spectrum?.set(Uint8Array.from(providerFrame.spectrum));
+            writeCapturedAudioSignals(external || isActuallyPlaying ? providerFrame ?? null : null);
         } else if (providerFrame === undefined && hasAudibleSignal && analyserRef.current) {
             const bufferLength = analyserRef.current.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
@@ -410,7 +406,9 @@ export function usePlaybackVisualizerBridge({
         }
 
         if (beatFxWantedRef.current && !backgroundHold) {
-            tickBeatFx(isActuallyPlaying ? audioElement : null, providerFrame === undefined ? analyserRef.current?.context : null);
+            tickBeatFx(isActuallyPlaying ? audioElement : null,
+                !external && providerFrame === undefined ? analyserRef.current?.context : null,
+                external?.source ? external.time : null);
         }
 
         // While a blend holds the picture, the active deck is the incoming track: its hand-off, clock

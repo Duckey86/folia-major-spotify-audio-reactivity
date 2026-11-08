@@ -3,6 +3,7 @@ import { OnlineProviderError } from '../../../types/onlineMusic';
 import { createProviderSongMetadata } from '../../../utils/songMetadata';
 import { getSpotifyTransportAvailability, requestSpotify } from './spotifyTransport';
 import { requireSpotifySong, spotifyUri } from './spotifyNormalize';
+import { latestSoloistCaptureFrame, resetSoloistCaptureFrame } from './soloistCaptureFeed';
 
 // src/services/onlineMusic/spotify/spotifySoloistPlayback.ts
 // The two ways Spotify plays here, and the second of them. 'standard' is librespot in the desktop
@@ -33,6 +34,7 @@ let soloistOffered = false;
 let reading: Promise<SpotifyWirePlaybackMode | null> | null = null;
 
 const keep = (answer: SpotifyWirePlaybackMode): SpotifyWirePlaybackMode => {
+    if (answer.mode !== mode) resetSoloistCaptureFrame();
     if (answer.mode !== mode) console.info(`[Spotify] Plays through ${answer.mode === 'soloist' ? 'Soloist' : 'the standard way'}`);
     mode = answer.mode === 'soloist' ? 'soloist' : 'standard';
     soloistOffered = answer.soloist === true;
@@ -65,6 +67,7 @@ export const spotifySoloistOffered = (): boolean => soloistOffered;
 export const spotifyPlaybackMode = (): SpotifyPlaybackMode => mode;
 
 export const spotifySoloistPlayback: OnlineExternalPlaybackProvider = {
+    readAudioAnalysisFrame: (_song, session) => spotifyPlaysThroughSoloist() ? latestSoloistCaptureFrame(session) : null,
     canPlay: song => {
         try {
             requireSpotifySong(song);
@@ -74,6 +77,7 @@ export const spotifySoloistPlayback: OnlineExternalPlaybackProvider = {
         }
     },
     async play(song, startSec) {
+        resetSoloistCaptureFrame();
         const id = requireSpotifySong(song);
         // The program is told the track's length: it has no event for the end of a track, and the
         // end is read from its position against it.
@@ -81,12 +85,15 @@ export const spotifySoloistPlayback: OnlineExternalPlaybackProvider = {
         await requestSpotify('soloist_play', { id, startMs: Math.max(0, Math.round(startSec * 1000)), durationMs });
     },
     async pause() {
+        resetSoloistCaptureFrame();
         await requestSpotify('soloist_pause');
     },
     async resume() {
+        resetSoloistCaptureFrame();
         await requestSpotify('soloist_resume');
     },
     async seek(seconds) {
+        resetSoloistCaptureFrame();
         await requestSpotify('soloist_seek', { positionMs: Math.max(0, Math.round(seconds * 1000)) });
     },
     async setVolume(volume) {

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import LoginScreen from '../../src/components/login/window/LoginScreen';
+import LoginWindow from '../../src/components/login/window/LoginWindow';
 import SoloistSetup from '../../src/components/spotify/SoloistSetup';
 import type { SoloistRequest, SoloistStatus } from '../../src/components/spotify/soloistSetupBridge';
 import type { ProbeDefinition } from './definition';
@@ -38,13 +38,10 @@ const SoloistProbe = () => {
             <output data-testid="opened-link">{opened}</output>
             <output data-testid="saved">{String(saved)}</output>
         </div>
-        <LoginScreen isOpen onClose={() => {}} rows={[{
-            providerId: 'spotify', displayName: 'Spotify', shortName: 'Spotify', availability: { configured: true },
-            status: 'anonymous', user: null, collections: [],
-        }]} activeProviderId="spotify" chosen={{ providerId: 'spotify', lead: 'sign-in' }} login={null}
-            onChoose={() => {}} onStart={() => {}} onSelectMethod={() => {}} onReopenBrowser={() => {}}
-            onRestartService={() => {}} onSwitch={() => {}} onSignOut={() => {}} buildReport={async () => ''}
-            setup={<SoloistSetup key={key} request={request} />} />
+        <LoginWindow isOpen onClose={() => {}} title="Spotify" closeTip="Close"
+            providerId="spotify" providerLabel="Spotify" rings={false}
+            column={() => null} tile={null} message={null}
+            before={<SoloistSetup key={key} request={request} />} />
     </>;
 };
 

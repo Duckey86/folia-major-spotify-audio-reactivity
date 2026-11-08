@@ -131,6 +131,9 @@ export interface ProviderPage<T> {
 
 /** Analysis values supplied by a playback engine outside the renderer's audio graph. */
 export interface ProviderAudioAnalysisFrame {
+    /** Optional capture generation and wall-clock receipt time; no raw samples. */
+    captureSession?: number;
+    capturedAt?: number;
     power: number;
     bass: number;
     lowMid: number;
@@ -516,6 +519,8 @@ export interface ProviderExternalPlaybackStatus {
  * Only the song's own provider can answer these calls.
  */
 export interface OnlineExternalPlaybackProvider {
+    /** Live spectral features for this player's song; null means capture is unavailable/stale. */
+    readAudioAnalysisFrame?(song: SongResult, session: string | null): ProviderAudioAnalysisFrame | null;
     /** False only for songs this external route already knows it cannot start; no network reads. */
     canPlay?(song: SongResult): boolean;
     /** Prepare a bounded successor queue without interrupting the current song. */

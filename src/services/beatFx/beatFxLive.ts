@@ -238,12 +238,12 @@ export const getBeatFxRotationSign = (): number => state.rotationSign;
  * One frame of the beat clock. `audioElement` is the deck being heard, or null when nothing is
  * playing; `context` is the AudioContext it is routed through, used for output latency.
  */
-export const tickBeatFx = (audioElement: HTMLMediaElement | null, context: BaseAudioContext | null | undefined) => {
+export const tickBeatFx = (audioElement: HTMLMediaElement | null, context: BaseAudioContext | null | undefined, externalTime: number | null = null) => {
     const now = performance.now();
     const dtSec = lastStepAt === null ? 0 : Math.min(0.1, (now - lastStepAt) / 1000);
     lastStepAt = now;
 
-    let heardTime: number | null = null;
+    let heardTime: number | null = externalTime !== null && Number.isFinite(externalTime) ? externalTime : null;
     if (audioElement && !audioElement.paused && !audioElement.ended) {
         const live = context as (BaseAudioContext & { outputLatency?: number; baseLatency?: number }) | null | undefined;
         const latency = (Number(live?.outputLatency) || 0) + (Number(live?.baseLatency) || 0);

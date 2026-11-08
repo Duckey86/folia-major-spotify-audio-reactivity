@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LyricData } from '@/types';
 import { PlayerState } from '@/types';
-import { currentTime, handoffLyricCurrentTime, lyricCurrentTime } from '@/stores/motionSignals';
+import { audioBands, audioPower, currentTime, handoffLyricCurrentTime, lyricCurrentTime } from '@/stores/motionSignals';
+import type { ProviderAudioAnalysisFrame } from '@/types/onlineMusic';
 import { setCurrentLineIndex } from '@/stores/usePlaybackStore';
 import { usePlaybackVisualizerBridge } from '@/components/app/playback/bridges/usePlaybackVisualizerBridge';
 import { buildObsBrowserSourceClock, resolveObsBrowserSourceClockTime } from '@/utils/obsBrowserSource';
@@ -11,6 +12,7 @@ import { buildObsBrowserSourceClock, resolveObsBrowserSourceClockTime } from '@/
 const env = vi.hoisted(() => ({
     externalSounding: false,
     externalPosition: 0,
+    capture: null as ProviderAudioAnalysisFrame | null,
     effects: [] as Array<() => unknown>,
     cleanup: [] as Array<() => void>,
     frame: null as FrameRequestCallback | null,
@@ -44,6 +46,8 @@ vi.mock('@/services/onlineMusic/omni', () => ({ omni: {
 vi.mock('@/services/onlineMusic/externalPlayback', () => ({
     isExternalPlaybackSounding: () => env.externalSounding,
     getExternalPosition: () => env.externalPosition,
+    readExternalPlaybackAudioAnalysis: () => ({ source: env.externalSounding ? 'session' : null,
+        time: env.externalPosition, frame: env.externalSounding ? env.capture : null }),
 }));
 vi.mock('@/hooks/useBeatFxTrack', () => ({ useBeatFxTrack: () => false }));
 vi.mock('@/services/beatFx/beatFxLive', () => ({ tickBeatFx: vi.fn() }));
@@ -92,6 +96,7 @@ const obs = (url: string, manualOffsetMs = 500) => buildObsBrowserSourceClock({
 beforeEach(() => {
     env.externalSounding = false;
     env.externalPosition = 0;
+    env.capture = null;
     env.starts.clear(); env.version = 0;
     env.lookup.mockReset().mockImplementation(url => env.starts.get(url) ?? 0);
     env.effects = []; env.cleanup = []; env.subscriber = null;
@@ -105,6 +110,35 @@ beforeEach(() => {
 afterEach(() => { env.cleanup.forEach(fn => fn()); vi.unstubAllGlobals(); });
 
 describe('preview lyric clock consumers', () => {
+    it('writes external spectra and bands even with a silent paused internal element, then clears them', () => {
+        env.state.playbackRoute = 'external';
+        env.externalSounding = true;
+        env.externalPosition = 15;
+        env.capture = { power: 170, bass: 220, lowMid: 120, mid: 90, vocal: 180, treble: 50, spectrum: Array(1024).fill(70) };
+        mount(pausedAudio(''));
+        frame();
+        expect(audioPower.get()).toBe(170);
+        expect([audioBands.bass.get(), audioBands.lowMid.get(), audioBands.mid.get(), audioBands.vocal.get(), audioBands.treble.get()])
+            .toEqual([220, 120, 90, 180, 50]);
+        expect(audioBands.spectrum?.get()).toEqual(new Uint8Array(1024).fill(70));
+        expect(currentTime.get()).toBe(15);
+        env.capture = null;
+        frame();
+        expect(audioPower.get()).toBe(0);
+        expect(audioBands.spectrum?.get()).toHaveLength(0);
+    });
+
+    it('does not let a paused internal seek overwrite external lyrics', () => {
+        const dispatch = mediaEvents();
+        env.state.playbackRoute = 'external';
+        env.externalSounding = true;
+        env.externalPosition = 45;
+        const silent = pausedAudio('', 0);
+        mount(silent);
+        frame();
+        dispatch('seeked', silent);
+        expect(lyricCurrentTime.get()).toBe(44.5);
+    });
     it('aligns main and OBS at 31.5 s without changing the 2 s media position or 500 ms manual offset', () => {
         env.starts.set('https://audio.test/preview', 30000);
         mount(audio('https://audio.test/preview'));

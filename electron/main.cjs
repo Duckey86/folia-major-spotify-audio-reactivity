@@ -81,6 +81,7 @@ const { createCompanionRequestHandler } = require('./appleMusic/companionIpc.cjs
 const { createYtmSandbox } = require('./ytm/sandbox.cjs');
 const { YTM_AUDIO_PRIVILEGED_SCHEME, YTM_AUDIO_SCHEME } = require('./ytm/audio.cjs');
 const { createSpotifyApiBridge } = require('./spotify/spotifyApiBridge.cjs');
+const { createSoloistCaptureBridge } = require('./soloist/capture.cjs');
 const { SPOTIFY_AUDIO_PRIVILEGED_SCHEME, SPOTIFY_AUDIO_SCHEME } = require('./spotify/audio.cjs');
 const { createQqAuthSessionRepository } = require('./qq/qqAuthSessionRepository.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
@@ -278,6 +279,8 @@ if (process.platform === 'darwin' && process.arch === 'x64') {
 }
 
 const store = new Store({ projectName: 'Folia' });
+// Personal Windows build: capture follows the official companion's lifecycle.
+const soloistCapture = createSoloistCaptureBridge({ app, BrowserWindow });
 // Before ready: the GPU process reads its switches when it starts.
 const gpuPreferenceApplied = applyGpuPreference({ app, store });
 const readActiveGpu = createActiveGpuReader(app);
@@ -420,6 +423,7 @@ const getSpotifyNetwork = () => {
   return spotifyNetwork;
 };
 const spotifyApiBridge = createSpotifyApiBridge({ store, safeStorage,
+  soloistCapture,
   fetch: async (input, init) => (await getSpotifyNetwork()).fetch(input instanceof URL ? input.href : input, { ...init, credentials: 'omit' }),
   openExternal: url => shell.openExternal(url),
   language: () => getMainLocaleKey(),
@@ -6547,6 +6551,7 @@ app.on('before-quit', (event) => {
     return;
   }
   isQuitHeldForAccounts = false;
+  soloistCapture.stop();
   transcodeService.dispose();
   hifiSession.killSync();
   // An mpv download the quit cuts off is stopped: its partial files go now if there is time, or

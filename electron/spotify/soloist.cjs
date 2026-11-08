@@ -69,6 +69,7 @@ function createSoloist({
   now = Date.now, wait = ms => new Promise(resolve => { setTimeout(resolve, ms); }),
   log = (...args) => console.log(...args), warn = (...args) => console.warn(...args),
   onProcessExit = stop => { process.once('exit', stop); },
+  capture = null,
   isAlive = pid => {
     try {
       process.kill(pid, 0);
@@ -312,6 +313,7 @@ function createSoloist({
 
   const lost = closed => {
     if (socket !== closed) return;
+    capture?.stop();
     socket = null;
     // A program taken over from an earlier run that went away: its process id may be another's later.
     adopted = null;
@@ -369,6 +371,7 @@ function createSoloist({
   };
 
   const stopRunning = async () => {
+    capture?.stop();
     const running = child;
     const left = adopted;
     child = null;
@@ -403,6 +406,7 @@ function createSoloist({
 
   // This process ends without quitting: the program it started, or took over, ends with it.
   onProcessExit(() => {
+    capture?.stop();
     try { child?.proc.kill(); } catch { /* gone */ }
     try { if (adopted) killPid(adopted.pid); } catch { /* gone */ }
   });
@@ -419,6 +423,7 @@ function createSoloist({
         let pid = null;
         try { pid = Number(files.readFileSync(path.join(dataDir(), PID_FILE), 'utf8').trim()) || null; } catch { /* none */ }
         adopted = pid ? { pid } : null;
+        if (pid) capture?.start(pid, config.executable);
         lastError = null;
         log(`[Soloist] Using the program an earlier run left running${pid ? ` (pid ${pid})` : ', with no process id to stop it by'}`);
         return;
@@ -466,7 +471,10 @@ function createSoloist({
     }
     void exited.then(code => {
       if (child !== entry) return;
+      capture?.stop();
       child = null;
+      auth = null;
+      playback = null;
       lastError = code === EXIT_EXPIRED ? 'expired' : 'exited';
       warn(`[Soloist] The program ended (exit ${code ?? 'not started'}): ${scrub(said) || 'it said nothing'}`);
       const closing = socket;
@@ -481,6 +489,8 @@ function createSoloist({
       if (url) {
         try {
           await connect(url);
+          if (child !== entry || quitting) break;
+          capture?.start(proc.pid, config.executable);
           lastError = null;
           log(`[Soloist] Started in ${now() - startedAt}ms (signed in: ${auth?.loggedIn ? 'yes' : 'not yet'})`);
           return;

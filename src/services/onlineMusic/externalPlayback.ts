@@ -130,6 +130,17 @@ export const isExternalPaused = () => session ? !session.playing : false;
 /** The song the external player was told to play, or null. */
 export const getExternalSong = () => session?.song ?? null;
 
+/** Analysis shares this route's confirmed session and seek revision, never a silent media element. */
+export const readExternalPlaybackAudioAnalysis = () => {
+    const current = session;
+    if (!isExternalRoute() || !current) return { source: null, frame: null, time: 0 };
+    const ready = current.announced && current.playing && !current.starting && !current.ended
+        && !current.foreign && !current.handedOver && !current.seeking && !current.seekPending;
+    const source = ready ? `${current.songKey}:${current.attempt}:${current.positionRevision}` : null;
+    const frame = omni.readExternalAudioAnalysisFrame(current.song, source);
+    return { source, frame: ready || frame === undefined ? frame : null, time: current.clock.read() };
+};
+
 /** Notified on every change the UI has to react to (state, end of track, a failed answer). */
 export const subscribeExternalPlayback = (listener: (event: ExternalPlaybackEvent) => void): (() => void) => {
     listeners.add(listener);

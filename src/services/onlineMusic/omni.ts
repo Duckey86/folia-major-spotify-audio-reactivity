@@ -1186,6 +1186,13 @@ export const omni = {
         return getOnlineMusicProviderForSong(song)?.externalPlayback?.isStatusForSong(song, status) === true;
     },
 
+    // Only the active song's external provider can supply external analysis.
+    readExternalAudioAnalysisFrame(song: SongResult, session: string | null): ProviderAudioAnalysisFrame | null | undefined {
+        const provider = getOnlineMusicProviderForSong(song);
+        if (!provider?.capabilities.externalPlayback) return undefined;
+        return provider.externalPlayback?.readAudioAnalysisFrame?.(song, session);
+    },
+
     // Resolve ownership from the displayed element, which can differ from the active song during a handover.
     readAudioAnalysisFrame(audio: HTMLAudioElement | null): ProviderAudioAnalysisFrame | null | undefined {
         if (!audio) return undefined;

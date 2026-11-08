@@ -111,11 +111,11 @@ function createSpotifyApiBridge({
   store, safeStorage, fetch, openExternal, language = () => 'zh-CN', now = Date.now,
   log = (...args) => console.log(...args), warn = (...args) => console.warn(...args), signIn: givenSignIn, openSession,
   audioDirectory, onAudioKept, wait = ms => new Promise(resolve => { setTimeout(resolve, ms); }),
-  soloistPaths, chooseSoloistFile, soloist: givenSoloist,
+  soloistPaths, chooseSoloistFile, soloist: givenSoloist, soloistCapture,
 }) {
   const repo = createSpotifySessionRepository({ store, safeStorage, log, warn });
   const soloist = givenSoloist ?? (soloistPaths
-    ? createSoloist({ store, safeStorage, dataDirectory: soloistPaths.data, cacheDirectory: soloistPaths.cache, chooseFile: chooseSoloistFile, log, warn })
+    ? createSoloist({ store, safeStorage, dataDirectory: soloistPaths.data, cacheDirectory: soloistPaths.cache, chooseFile: chooseSoloistFile, log, warn, capture: soloistCapture })
     : null);
   const playbackMode = () => (soloist && store.get(PLAYBACK_KEY) === 'soloist' ? 'soloist' : 'standard');
   const setPlaybackMode = mode => {

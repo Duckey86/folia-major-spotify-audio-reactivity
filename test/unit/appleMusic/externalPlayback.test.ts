@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SongResult } from '@/types';
-import type { ProviderExternalPlaybackStatus } from '@/types/onlineMusic';
+import type { ProviderAudioAnalysisFrame, ProviderExternalPlaybackStatus } from '@/types/onlineMusic';
 
 // test/unit/appleMusic/externalPlayback.test.ts
 // The route that follows a player outside the app: it starts the song there, follows the player's
 // clock between answers, pauses when another engine takes over, and moves the queue on at the end.
 
 const omniMock = vi.hoisted(() => ({
+    readExternalAudioAnalysisFrame: vi.fn((_song: unknown, _session: string | null): ProviderAudioAnalysisFrame | null | undefined => undefined),
     canPlayExternally: vi.fn(() => true),
     canPlaySong: vi.fn(() => true),
     prepareExternalPlaybackQueue: vi.fn(async () => {}),
@@ -68,6 +69,36 @@ describe('external playback route', () => {
         engine.stopExternalPlayback('test end');
         usePlaybackStore.setState({ playbackRoute: 'web', audioSrc: null, playerState: PlayerState.IDLE });
         vi.useRealTimers();
+    });
+
+    it('scopes captured analysis to the announced playing session and resets on seeks, pauses, buffering and handover', async () => {
+        const captured = { power: 120, bass: 180, lowMid: 90, mid: 80, vocal: 100, treble: 40, spectrum: Array(1024).fill(30) };
+        omniMock.readExternalAudioAnalysisFrame.mockReturnValue(captured);
+        await engine.beginExternalPlayback(song, 0);
+        expect(engine.readExternalPlaybackAudioAnalysis().frame).toBeNull();
+        engine.announceExternalPlayback();
+        const first = engine.readExternalPlaybackAudioAnalysis();
+        expect(first.frame).toBe(captured);
+        expect(first.source).not.toBeNull();
+        engine.seekExternalPlayback(11);
+        expect(engine.readExternalPlaybackAudioAnalysis().frame).toBeNull();
+        await flush();
+        expect(engine.readExternalPlaybackAudioAnalysis().source).not.toBe(first.source);
+        engine.pauseExternalPlayback();
+        expect(engine.readExternalPlaybackAudioAnalysis().source).toBeNull();
+        expect(omniMock.readExternalAudioAnalysisFrame).toHaveBeenLastCalledWith(song, null);
+        engine.resumeExternalPlayback();
+        omniMock.getExternalPlaybackStatus.mockResolvedValue(status({ isPlaying: false, starting: true }));
+        await vi.advanceTimersByTimeAsync(500);
+        expect(engine.readExternalPlaybackAudioAnalysis().frame).toBeNull();
+        omniMock.getExternalPlaybackStatus.mockResolvedValue(status());
+        await vi.advanceTimersByTimeAsync(500);
+        expect(engine.readExternalPlaybackAudioAnalysis().frame).toBe(captured);
+        engine.handOverExternalPlayback();
+        expect(engine.readExternalPlaybackAudioAnalysis().frame).toBeNull();
+        engine.stopExternalPlayback('changed provider');
+        expect(engine.readExternalPlaybackAudioAnalysis().source).toBeNull();
+        omniMock.readExternalAudioAnalysisFrame.mockReturnValue(undefined);
     });
 
     it('keeps live broadcasts untimed while playing and ignores timeline seeks', async () => {

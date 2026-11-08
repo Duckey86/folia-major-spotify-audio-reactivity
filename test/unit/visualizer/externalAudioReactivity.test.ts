@@ -15,6 +15,15 @@ const frame = (bass = 0, mid = 0, treble = 0, vocal = 0): ProviderAudioAnalysisF
 afterEach(() => { externalAudioReactivity.reset(); setBeatFxLiveEffects({}); vi.restoreAllMocks(); });
 
 describe('external audio reactivity', () => {
+    it('resets onset history when the native helper restarts even at the same track time', () => {
+        const live = new ExternalAudioReactivity();
+        live.update('first', 0, { ...frame(), captureSession: 1 }, 0);
+        live.update('first', 0.1, { ...frame(180), captureSession: 1 }, 100);
+        expect(live.events).toHaveLength(1);
+        live.update('first', 0.2, { ...frame(240), captureSession: 2 }, 200);
+        expect(live.events).toHaveLength(0);
+        expect(live.hits.times).toHaveLength(0);
+    });
     it('does not confuse vocal energy, low-band onsets and mid/high onsets', () => {
         const live = new ExternalAudioReactivity();
         live.update('first', 0, frame(), 0);
